@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Cray-2 Software Model</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:#050805;color:#b8ffb8;font-family:"Courier New",monospace}
+body{padding:18px}
+button,input,textarea,select{font:inherit}
+button{background:#0a160a;color:#b8ffb8;border:1px solid #286b28;padding:8px 12px;cursor:pointer}
+button:hover{background:#102410}
+button:active{background:#173817}
+input,textarea,select{background:#020602;color:#b8ffb8;border:1px solid #286b28;padding:7px}
+textarea{resize:vertical}
+.panel{border:1px solid #286b28;background:#071007;box-shadow:0 0 18px rgba(50,255,50,.05)}
+header{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:15px;margin-bottom:15px}
+.title{font-size:25px;font-weight:bold}
+.subtitle{font-size:12px;color:#6fa86f;margin-top:5px}
+.status{display:flex;gap:18px;flex-wrap:wrap;font-size:12px}
+.ok{color:#65ff65}
+.warn{color:#ffff75}
+.bad{color:#ff7070}
+.grid{display:grid;grid-template-columns:280px minmax(400px,1fr) 350px;gap:15px}
+section{padding:12px}
+h2{font-size:14px;margin:0 0 12px;color:#72ff72;border-bottom:1px solid #174817;padding-bottom:8px}
+h3{font-size:12px;color:#91c991;margin:14px 0 7px}
+.arch{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.block{border:1px solid #174817;padding:9px;background:#030803;min-height:60px}
+.block strong{display:block;color:#7dff7d;font-size:12px;margin-bottom:5px}
+.block span{font-size:11px;color:#79a679}
+.machine{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.reg{padding:8px;border:1px solid #174817;background:#020602}
+.reg .name{color:#73ff73;font-size:11px}
+.reg .value{font-size:12px;margin-top:5px;word-break:break-all}
+.vector{grid-column:1/-1}
+.vector-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+.vr{border:1px solid #123d12;padding:5px;text-align:center;font-size:10px;background:#010401}
+.memory{max-height:360px;overflow:auto;border:1px solid #174817}
+.memrow{display:grid;grid-template-columns:65px 85px 1fr;gap:8px;padding:4px 7px;border-bottom:1px solid #0b240b;font-size:10px}
+.memrow.active{background:#123012;color:#d5ffd5}
+.editor{width:100%;height:300px;line-height:1.45;tab-size:2}
+.toolbar{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.console{height:190px;overflow:auto;background:#010301;border:1px solid #174817;padding:9px;font-size:11px;white-space:pre-wrap}
+.metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.metric{border:1px solid #174817;padding:8px}
+.metric label{display:block;color:#639863;font-size:10px}
+.metric b{font-size:16px;color:#baffba}
+.progress{height:10px;background:#020502;border:1px solid #174817;margin-top:6px}
+.progress div{height:100%;background:#3fb53f;width:0}
+table{width:100%;border-collapse:collapse;font-size:10px}
+td,th{border:1px solid #153c15;padding:5px;text-align:left}
+th{color:#7dff7d}
+footer{margin-top:15px;padding:10px;text-align:center;font-size:10px;color:#527452}
+@media(max-width:1100px){.grid{grid-template-columns:1fr 1fr}.grid section:nth-child(2){grid-column:1/-1}}
+@media(max-width:700px){.grid{grid-template-columns:1fr}.machine{grid-template-columns:1fr 1fr}.vector-grid{grid-template-columns:repeat(4,1fr)}body{padding:8px}}
+</style>
+</head>
+<body>
+
+<header class="panel">
+  <div>
+    <div class="title">CRAY-2 SOFTWARE MODEL</div>
+    <div class="subtitle">Interactive educational architecture simulation · browser implementation</div>
+  </div>
+  <div class="status">
+    <span id="runState" class="ok">● HALTED</span>
+    <span>MODE: VECTOR</span>
+    <span id="cycleStatus">CYCLES: 0</span>
+    <span id="pcStatus">PC: 0</span>
+  </div>
+</header>
+
+<div class="grid">
+
+<section class="panel">
+  <h2>ARCHITECTURE</h2>
+
+  <div class="arch">
+    <div class="block">
+      <strong>VECTOR UNIT</strong>
+      <span>64-bit vector elements</span>
+    </div>
+    <div class="block">
+      <strong>SCALAR UNIT</strong>
+      <span>Scalar arithmetic/control</span>
+    </div>
+    <div class="block">
+      <strong>REGISTERS</strong>
+      <span>Vector + scalar state</span>
+    </div>
+    <div class="block">
+      <strong>MEMORY</strong>
+      <span>Simulated central memory</span>
+    </div>
+    <div class="block">
+      <strong>CONTROL</strong>
+      <span>Instruction dispatcher</span>
+    </div>
+    <div class="block">
+      <strong>PIPELINE</strong>
+      <span>Cycle-oriented execution</span>
+    </div>
+  </div>
+
+  <h3>SIMULATION CONTROLS</h3>
+  <div class="toolbar">
+    <button id="run">RUN</button>
+    <button id="step">STEP</button>
+    <button id="reset">RESET</button>
+    <button id="stop">HALT</button>
+  </div>
+
+  <label>Execution speed</label>
+  <input id="speed" type="range" min="1" max="100" value="30" style="width:100%">
+
+  <h3>PROGRAM</h3>
+  <select id="programSelect" style="width:100%">
+    <option value="vectorAdd">Vector addition</option>
+    <option value="vectorMul">Vector multiplication</option>
+    <option value="dotProduct">Vector dot product</option>
+    <option value="memory">Memory test</option>
+  </select>
+
+  <h3>CPU METRICS</h3>
+  <div class="metric-grid">
+    <div class="metric"><label>INSTRUCTIONS</label><b id="instructions">0</b></div>
+    <div class="metric"><label>VECTOR OPS</label><b id="vectorOps">0</b></div>
+    <div class="metric"><label>MEMORY OPS</label><b id="memoryOps">0</b></div>
+    <div class="metric"><label>IPC</label><b id="ipc">0.00</b></div>
+  </div>
+
+  <h3>VECTOR PIPELINE</h3>
+  <div class="progress"><div id="pipelineBar"></div></div>
+  <div id="pipelineText" style="font-size:10px;margin-top:5px">IDLE</div>
+</section>
+
+<section class="panel">
+  <h2>SIMULATOR WORKSPACE</h2>
+
+  <div class="machine">
+
+    <div class="reg">
+      <div class="name">PC</div>
+      <div class="value" id="pc">0</div>
+    </div>
+
+    <div class="reg">
+      <div class="name">IR</div>
+      <div class="value" id="ir">HALT</div>
+    </div>
+
+    <div class="reg">
+      <div class="name">STATUS</div>
+      <div class="value" id="cpuStatus">HALTED</div>
+    </div>
+
+    <div class="reg">
+      <div class="name">S0</div>
+      <div class="value" id="s0">0</div>
+    </div>
+
+    <div class="reg">
+      <div class="name">S1</div>
+      <div class="value" id="s1">0</div>
+    </div>
+
+    <div class="reg">
+      <div class="name">S2</div>
+      <div class="value" id="s2">0</div>
+    </div>
+
+    <div class="reg vector">
+      <div class="name">VECTOR REGISTER V0</div>
+      <div class="vector-grid" id="v0"></div>
+    </div>
+
+    <div class="reg vector">
+      <div class="name">VECTOR REGISTER V1</div>
+      <div class="vector-grid" id="v1"></div>
+    </div>
+
+    <div class="reg vector">
+      <div class="name">VECTOR REGISTER V2</div>
+      <div class="vector-grid" id="v2"></div>
+    </div>
+
+  </div>
+
+  <h3>PROGRAM EDITOR</h3>
+  <textarea id="editor" class="editor" spellcheck="false"></textarea>
+
+  <div class="toolbar">
+    <button id="load">LOAD PROGRAM</button>
+    <button id="assemble">ASSEMBLE</button>
+    <button id="clearConsole">CLEAR CONSOLE</button>
+  </div>
+
+  <h3>CONSOLE</h3>
+  <div class="console" id="console"></div>
+</section>
+
+<section class="panel">
+  <h2>CENTRAL MEMORY</h2>
+
+  <div class="memory" id="memory"></div>
+
+  <h3>MEMORY INSPECTOR</h3>
+  <div class="toolbar">
+    <input id="memoryAddress" type="number" min="0" max="255" value="0">
+    <button id="inspect">INSPECT</button>
+  </div>
+  <div class="block">
+    <strong>ADDRESS</strong>
+    <span id="inspectAddress">0</span>
+    <br><br>
+    <strong>VALUE</strong>
+    <span id="inspectValue">0</span>
+    <br><br>
+    <strong>HEX</strong>
+    <span id="inspectHex">0x0000000000000000</span>
+  </div>
+
+  <h3>INSTRUCTION SET</h3>
+  <table>
+    <thead>
+      <tr><th>Instruction</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>VLOAD</td><td>Load vector</td></tr>
+      <tr><td>VSTORE</td><td>Store vector</td></tr>
+      <tr><td>VADD</td><td>Vector addition</td></tr>
+      <tr><td>VSUB</td><td>Vector subtraction</td></tr>
+      <tr><td>VMUL</td><td>Vector multiplication</td></tr>
+      <tr><td>VDIV</td><td>Vector division</td></tr>
+      <tr><td>VSET</td><td>Create vector constant</td></tr>
+      <tr><td>VREDUCE</td><td>Vector reduction</td></tr>
+      <tr><td>SLOAD</td><td>Scalar load</td></tr>
+      <tr><td>SADD</td><td>Scalar addition</td></tr>
+      <tr><td>JMP</td><td>Jump</td></tr>
+      <tr><td>PRINT</td><td>Console output</td></tr>
+      <tr><td>HALT</td><td>Stop execution</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+
+<footer class="panel">
+  CRAY-2 SOFTWARE MODEL · SabirDev123/cray-2-sim · Educational architectural simulation
+</footer>
+
+<script>
+"use strict";
+
+const VECTOR_LENGTH = 8;
+const MEMORY_SIZE = 256;
+
+const state = {
+  pc: 0,
+  cycles: 0,
+  instructions: 0,
+  vectorOps: 0,
+  memoryOps: 0,
+  running: false,
+  halted: true,
+  timer: null,
+  program: [],
+  memory: new Float64Array(MEMORY_SIZE),
+  scalar: [0,0,0],
+  vectors: [
+    new Float64Array(VECTOR_LENGTH),
+    new Float64Array(VECTOR_LENGTH),
+    new Float64Array(VECTOR_LENGTH),
+    new Float64Array(VECTOR_LENGTH)
+  ],
+  ir: "HALT"
+};
+
+const $ = id => document.getElementById(id);
+
+function log(message){
+  const consoleBox = $("console");
+  const time = String(state.cycles).padStart(8,"0");
+  consoleBox.textContent += `[CYCLE ${time}] ${message}\n`;
+  consoleBox.scrollTop = consoleBox.scrollHeight;
+}
+
+function fmt(n){
+  if(!Number.isFinite(n)) return "NaN";
+  if(Math.abs(n) < 1e-10) return "0";
+  return Number(n.toPrecision(8)).toString();
+}
+
+function hex64(value){
+  const buffer = new ArrayBuffer(8);
+  const view = new DataView(buffer);
+  view.setFloat64(0,value,false);
+  return "0x"+view.getBigUint64(0,false).toString(16).padStart(16,"0");
+}
+
+function renderVector(id, vector){
+  const box = $(id);
+  box.innerHTML = "";
+  for(let i=0;i<VECTOR_LENGTH;i++){
+    const cell = document.createElement("div");
+    cell.className = "vr";
+    cell.textContent = fmt(vector[i]);
+    box.appendChild(cell);
+  }
+}
+
+function renderMemory(){
+  const box = $("memory");
+  box.innerHTML = "";
+
+  for(let i=0;i<MEMORY_SIZE;i++){
+    const row = document.createElement("div");
+    row.className = "memrow";
+    if(i === state.scalar[0]) row.classList.add("active");
+
+    const address = document.createElement("span");
+    address.textContent = i.toString().padStart(3,"0");
+
+    const hex = document.createElement("span");
+    hex.textContent = hex64(state.memory[i]);
+
+    const value = document.createElement("span");
+    value.textContent = fmt(state.memory[i]);
+
+    row.append(address,hex,value);
+    box.appendChild(row);
+  }
+}
+
+function render(){
+  $("pc").textContent = state.pc;
+  $("pcStatus").textContent = `PC: ${state.pc}`;
+  $("cycleStatus").textContent = `CYCLES: ${state.cycles}`;
+  $("ir").textContent = state.ir;
+  $("cpuStatus").textContent = state.halted ? "HALTED" : "RUNNING";
+
+  $("s0").textContent = fmt(state.scalar[0]);
+  $("s1").textContent = fmt(state.scalar[1]);
+  $("s2").textContent = fmt(state.scalar[2]);
+
+  $("instructions").textContent = state.instructions;
+  $("vectorOps").textContent = state.vectorOps;
+  $("memoryOps").textContent = state.memoryOps;
+
+  const ipc = state.cycles === 0 ? 0 : state.instructions/state.cycles;
+  $("ipc").textContent = ipc.toFixed(2);
+
+  $("runState").textContent = state.running ? "● RUNNING" : "● HALTED";
+  $("runState").className = state.running ? "warn" : "ok";
+
+  renderVector("v0",state.vectors[0]);
+  renderVector("v1",state.vectors[1]);
+  renderVector("v2",state.vectors[2]);
+
+  renderMemory();
+}
+
+function resetState(){
+  stopExecution();
+
+  state.pc = 0;
+  state.cycles = 0;
+  state.instructions = 0;
+  state.vectorOps = 0;
+  state.memoryOps = 0;
+  state.halted = true;
+  state.ir = "HALT";
+
+  state.memory.fill(0);
+  state.scalar.fill(0);
+
+  for(const vector of state.vectors){
+    vector.fill(0);
+  }
+
+  $("pipelineBar").style.width = "0%";
+  $("pipelineText").textContent = "IDLE";
+
+  render();
+  log("Machine reset.");
+}
+
+function parseValue(token){
+  const n = Number(token);
+  if(!Number.isFinite(n)){
+    throw new Error(`Invalid numeric value: ${token}`);
+  }
+  return n;
+}
+
+function parseVectorLiteral(tokens){
+  const values = tokens.map(parseValue);
+
+  const result = new Float64Array(VECTOR_LENGTH);
+
+  for(let i=0;i<VECTOR_LENGTH;i++){
+    result[i] = values[i % values.length];
+  }
+
+  return result;
+}
+
+function assemble(source){
+  const lines = source.split(/\r?\n/);
+  const instructions = [];
+
+  for(let lineNumber=0;lineNumber<lines.length;lineNumber++){
+    let line = lines[lineNumber].trim();
+
+    if(!line || line.startsWith("#")) continue;
+
+    line = line.replace(/#.*/,"").trim();
+
+    if(!line) continue;
+
+    const parts = line.split(/[\s,]+/);
+    const op = parts.shift().toUpperCase();
+
+    instructions.push({
+      op,
+      args: parts,
+      source: line,
+      line: lineNumber + 1
+    });
+  }
+
+  return instructions;
+}
+
+function registerIndex(name,prefix){
+  const match = new RegExp("^"+prefix+"(\\d+)$","i").exec(name);
+
+  if(!match) throw new Error(`Expected ${prefix} register, got ${name}`);
+
+  const index = Number(match[1]);
+
+  if(prefix === "V" && (index < 0 || index >= state.vectors.length)){
+    throw new Error(`Vector register V${index} does not exist`);
+  }
+
+  if(prefix === "S" && (index < 0 || index >= state.scalar.length)){
+    throw new Error(`Scalar register S${index} does not exist`);
+  }
+
+  return index;
+}
+
+function memoryAddress(token){
+  const address = Math.trunc(parseValue(token));
+
+  if(address < 0 || address >= MEMORY_SIZE){
+    throw new Error(`Memory address ${address} out of range`);
+  }
+
+  return address;
+}
+
+function requireArgs(ins,count){
+  if(ins.args.length < count){
+    throw new Error(`${ins.op} requires ${count} arguments`);
+  }
+}
+
+function vectorBinary(destination,a,b,operation){
+  for(let i=0;i<VECTOR_LENGTH;i++){
+    destination[i] = operation(a[i],b[i]);
+  }
+
+  state.vectorOps += VECTOR_LENGTH;
+}
+
+function execute(ins){
+  const op = ins.op;
+  const a = ins.args;
+
+  state.ir = ins.source;
+
+  switch(op){
+
+    case "VSET":{
+      requireArgs(ins,2);
+      const d = registerIndex(a[0],"V");
+      state.vectors[d] = parseVectorLiteral(a.slice(1));
+      state.vectorOps += VECTOR_LENGTH;
+      log(`VSET ${a[0]} loaded`);
+      break;
+    }
+
+    case "VLOAD":{
+      requireArgs(ins,2);
+      const d = registerIndex(a[0],"V");
+      const address = memoryAddress(a[1]);
+
+      for(let i=0;i<VECTOR_LENGTH;i++){
+        state.vectors[d][i] = state.memory[address+i] ?? 0;
+      }
+
+      state.memoryOps += VECTOR_LENGTH;
+      log(`VLOAD ${a[0]} <- MEM[${address}]`);
+      break;
+    }
+
+    case "VSTORE":{
+      requireArgs(ins,2);
+      const s = registerIndex(a[0],"V");
+      const address = memoryAddress(a[1]);
+
+      for(let i=0;i<VECTOR_LENGTH;i++){
+        if(address+i < MEMORY_SIZE){
+          state.memory[address+i] = state.vectors[s][i];
+        }
+      }
+
+      state.memoryOps += VECTOR_LENGTH;
+      log(`VSTORE ${a[0]} -> MEM[${address}]`);
+      break;
+    }
+
+    case "VADD":{
+      requireArgs(ins,3);
+      const d = registerIndex(a[0],"V");
+      const x = registerIndex(a[1],"V");
+      const y = registerIndex(a[2],"V");
+      vectorBinary(state.vectors[d],state.vectors[x],state.vectors[y],(x,y)=>x+y);
+      log(`VADD ${a[0]} = ${a[1]} + ${a[2]}`);
+      break;
+    }
+
+    case "VSUB":{
+      requireArgs(ins,3);
+      const d = registerIndex(a[0],"V");
+      const x = registerIndex(a[1],"V");
+      const y = registerIndex(a[2],"V");
+      vectorBinary(state.vectors[d],state.vectors[x],state.vectors[y],(x,y)=>x-y);
+      log(`VSUB ${a[0]} = ${a[1]} - ${a[2]}`);
+      break;
+    }
+
+    case "VMUL":{
+      requireArgs(ins,3);
+      const d = registerIndex(a[0],"V");
+      const x = registerIndex(a[1],"V");
+      const y = registerIndex(a[2],"V");
+      vectorBinary(state.vectors[d],state.vectors[x],state.vectors[y],(x,y)=>x*y);
+      log(`VMUL ${a[0]} = ${a[1]} * ${a[2]}`);
+      break;
+    }
+
+    case "VDIV":{
+      requireArgs(ins,3);
+      const d = registerIndex(a[0],"V");
+      const x = registerIndex(a[1],"V");
+      const y = registerIndex(a[2],"V");
+
+      vectorBinary(
+        state.vectors[d],
+        state.vectors[x],
+        state.vectors[y],
+        (x,y)=>y === 0 ? 0 : x/y
+      );
+
+      log(`VDIV ${a[0]} = ${a[1]} / ${a[2]}`);
+      break;
+    }
+
+    case "VREDUCE":{
+      requireArgs(ins,2);
+
+      const d = registerIndex(a[0],"S");
+      const x = registerIndex(a[1],"V");
+
+      let total = 0;
+
+      for(let i=0;i<VECTOR_LENGTH;i++){
+        total += state.vectors[x][i];
+      }
+
+      state.scalar[d] = total;
+      state.vectorOps += VECTOR_LENGTH;
+
+      log(`VREDUCE ${a[1]} -> ${a[0]} = ${fmt(total)}`);
+      break;
+    }
+
+    case "SLOAD":{
+      requireArgs(ins,2);
+
+      const d = registerIndex(a[0],"S");
+      const address = memoryAddress(a[1]);
+
+      state.scalar[d] = state.memory[address];
+      state.memoryOps++;
+
+      log(`SLOAD ${a[0]} <- MEM[${address}]`);
+      break;
+    }
+
+    case "SADD":{
+      requireArgs(ins,3);
+
+      const d = registerIndex(a[0],"S");
+      const x = registerIndex(a[1],"S");
+      const y = registerIndex(a[2],"S");
+
+      state.scalar[d] = state.scalar[x] + state.scalar[y];
+
+      log(`SADD ${a[0]} = ${a[1]} + ${a[2]}`);
+      break;
+    }
+
+    case "JMP":{
+      requireArgs(ins,1);
+
+      const target = Math.trunc(parseValue(a[0]));
+
+      if(target < 0 || target >= state.program.length){
+        throw new Error(`Jump target ${target} is outside program`);
+      }
+
+      state.pc = target - 1;
+
+      log(`JMP -> ${target}`);
+      break;
+    }
+
+    case "PRINT":{
+      requireArgs(ins,1);
+
+      const name = a[0].toUpperCase();
+
+      if(/^V\d+$/.test(name)){
+        const i = registerIndex(name,"V");
+        log(`${name} = [${Array.from(state.vectors[i]).map(fmt).join(", ")}]`);
+      }
+      else if(/^S\d+$/.test(name)){
+        const i = registerIndex(name,"S");
+        log(`${name} = ${fmt(state.scalar[i])}`);
+      }
+      else{
+        throw new Error(`Cannot PRINT ${name}`);
+      }
+
+      break;
+    }
+
+    case "HALT":
+      state.halted = true;
+      state.running = false;
+      log("HALT encountered.");
+      break;
+
+    default:
+      throw new Error(`Unknown instruction: ${op}`);
+  }
+}
+
+function step(){
+  if(state.halted){
+    return;
+  }
+
+  if(state.pc >= state.program.length){
+    state.halted = true;
+    state.running = false;
+    state.ir = "END";
+    log("End of program.");
+    render();
+    return;
+  }
+
+  const instruction = state.program[state.pc];
+
+  try{
+    execute(instruction);
+
+    state.instructions++;
+    state.cycles++;
+
+    $("pipelineBar").style.width = `${Math.min(100,(state.cycles%20)*5)}%`;
+    $("pipelineText").textContent =
+      `EXECUTING ${instruction.op} · CYCLE ${state.cycles}`;
+
+    state.pc++;
+
+    if(instruction.op === "HALT"){
+      state.halted = true;
+      state.running = false;
+      $("pipelineBar").style.width = "0%";
+      $("pipelineText").textContent = "HALTED";
+    }
+
+  }catch(error){
+    state.halted = true;
+    state.running = false;
+    log(`ERROR: ${error.message}`);
+  }
+
+  render();
+}
+
+function startExecution(){
+  if(state.program.length === 0){
+    log("No program loaded.");
+    return;
+  }
+
+  if(state.halted){
+    state.pc = 0;
+    state.halted = false;
+  }
+
+  state.running = true;
+  $("runState").textContent = "● RUNNING";
+  $("runState").className = "warn";
+
+  stopTimerOnly();
+
+  const speed = Number($("speed").value);
+  const interval = Math.max(10,210-speed*2);
+
+  state.timer = setInterval(()=>{
+    if(!state.running || state.halted){
+      stopTimerOnly();
+      return;
+    }
+
+    step();
+  },interval);
+
+  render();
+}
+
+function stopTimerOnly(){
+  if(state.timer !== null){
+    clearInterval(state.timer);
+    state.timer = null;
+  }
+}
+
+function stopExecution(){
+  stopTimerOnly();
+  state.running = false;
+}
+
+function loadProgram(source){
+  try{
+    state.program = assemble(source);
+    state.pc = 0;
+    state.halted = false;
+    state.running = false;
+    state.ir = "READY";
+
+    log(`Loaded ${state.program.length} instructions.`);
+
+    render();
+  }catch(error){
+    log(`ASSEMBLY ERROR: ${error.message}`);
+  }
+}
+
+const programs = {
+
+vectorAdd:
+`# Vector addition demonstration
+VSET V0 1 2 3 4 5 6 7 8
+VSET V1 10 20 30 40 50 60 70 80
+VADD V2 V0 V1
+PRINT V0
+PRINT V1
+PRINT V2
+HALT`,
+
+vectorMul:
+`# Vector multiplication demonstration
+VSET V0 2 4 6 8 10 12 14 16
+VSET V1 3 3 3 3 3 3 3 3
+VMUL V2 V0 V1
+PRINT V2
+HALT`,
+
+dotProduct:
+`# Dot product demonstration
+VSET V0 1 2 3 4 5 6 7 8
+VSET V1 2 2 2 2 2 2 2 2
+VMUL V2 V0 V1
+VREDUCE S0 V2
+PRINT V2
+PRINT S0
+HALT`,
+
+memory:
+`# Central-memory demonstration
+VSET V0 100 200 300 400 500 600 700 800
+VSTORE V0 32
+VLOAD V1 32
+PRINT V1
+HALT`
+};
+
+$("editor").value = programs.vectorAdd;
+
+$("programSelect").addEventListener("change",()=>{
+  $("editor").value = programs[$("programSelect").value];
+});
+
+$("load").addEventListener("click",()=>{
+  loadProgram($("editor").value);
+});
+
+$("assemble").addEventListener("click",()=>{
+  try{
+    const program = assemble($("editor").value);
+    log(`Assembly successful: ${program.length} instructions.`);
+  }catch(error){
+    log(`ASSEMBLY ERROR: ${error.message}`);
+  }
+});
+
+$("run").addEventListener("click",startExecution);
+
+$("step").addEventListener("click",()=>{
+  if(state.program.length === 0){
+    loadProgram($("editor").value);
+  }
+
+  if(state.halted){
+    state.halted = false;
+  }
+
+  step();
+});
+
+$("stop").addEventListener("click",()=>{
+  stopExecution();
+  state.halted = true;
+  state.ir = "HALT";
+  $("pipelineBar").style.width = "0%";
+  $("pipelineText").textContent = "HALTED";
+  log("Manual HALT.");
+  render();
+});
+
+$("reset").addEventListener("click",resetState);
+
+$("clearConsole").addEventListener("click",()=>{
+  $("console").textContent = "";
+});
+
+$("inspect").addEventListener("click",()=>{
+  const address = Math.trunc(Number($("memoryAddress").value));
+
+  if(!Number.isInteger(address) || address < 0 || address >= MEMORY_SIZE){
+    $("inspectValue").textContent = "INVALID ADDRESS";
+    return;
+  }
+
+  $("inspectAddress").textContent = address;
+  $("inspectValue").textContent = fmt(state.memory[address]);
+  $("inspectHex").textContent = hex64(state.memory[address]);
+});
+
+$("speed").addEventListener("input",()=>{
+  if(state.running){
+    startExecution();
+  }
+});
+
+resetState();
+loadProgram(programs.vectorAdd);
+
+log("Cray-2 software model initialized.");
+log("This is a software architectural model, not a cycle-accurate reproduction.");
+log("Vector length configured to 8 simulated elements.");
+</script>
+
+</body>
+</html>
